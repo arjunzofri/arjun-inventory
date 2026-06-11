@@ -56,9 +56,9 @@ vida.clientes.kcodclie  <--  vida.movidcto.kcodcli2
 
 ## Estado actual
 
-- Último slice completado: ninguno — proyecto recién iniciado
-- Próximo slice: S01 — Infraestructura base
-- Feature flags activos: ninguno
+- Último slice completado: S01 — Infraestructura base (2026-06-11)
+- Próximo slice: S02 — Auth (tabla usuarios, NextAuth credentials, login/logout, seed admin)
+- Feature flags activos: s01_infraestructura
 
 ## Notas técnicas abiertas
 

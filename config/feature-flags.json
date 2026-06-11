@@ -1,3 +1,4 @@
 {
-  "s01_infraestructura": false
+  "s01_infraestructura": false,
+  "s02_auth": false
 }

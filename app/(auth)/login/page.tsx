@@ -19,17 +19,17 @@ export default function LoginPage() {
     setLoading(true);
 
     const form = new FormData(e.currentTarget);
-    const email = form.get("email") as string;
+    const username = form.get("username") as string;
     const password = form.get("password") as string;
 
     const result = await signIn("credentials", {
-      email,
+      username,
       password,
       redirect: false,
     });
 
     if (result?.error) {
-      setError("Credenciales inválidas. Verificá tu email y contraseña.");
+      setError("Credenciales inválidas. Verificá tu usuario y contraseña.");
       setLoading(false);
       return;
     }
@@ -49,14 +49,14 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="username">Usuario</Label>
               <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="bodeguero@arjun.cl"
+                id="username"
+                name="username"
+                type="text"
+                placeholder="usuario"
                 required
-                autoComplete="email"
+                autoComplete="username"
               />
             </div>
             <div className="space-y-1">

@@ -13,7 +13,7 @@ export const rolEnum = pgEnum("rol", ["admin", "bodeguero"]);
 export const usuarios = pgTable("usuarios", {
   id: serial("id").primaryKey(),
   nombre: text("nombre").notNull(),
-  email: text("email").notNull().unique(),
+  username: text("username").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   rol: rolEnum("rol").notNull(),
   activo: boolean("activo").default(true),

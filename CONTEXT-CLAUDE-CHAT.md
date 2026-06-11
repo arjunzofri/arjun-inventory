@@ -56,9 +56,9 @@ vida.clientes.kcodclie  <--  vida.movidcto.kcodcli2
 
 ## Estado actual
 
-- Último slice completado: S02 — Auth (2026-06-11)
-- Próximo slice: S03 — Query compras Anil (endpoint GET /api/reconciliacion)
-- Feature flags activos: s01_infraestructura, s02_auth
+- Último slice completado: S03 — Query compras Anil (2026-06-11)
+- Próximo slice: S04 — Tabla de reconciliación (UI con las 6 columnas)
+- Feature flags activos: s01_infraestructura, s02_auth, s03_query_compras
 
 ## Notas técnicas abiertas
 

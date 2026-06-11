@@ -12,7 +12,7 @@ import { db } from "@/db/arjun";
 import { usuarios } from "@/db/arjun/schema";
 
 async function seed() {
-  const email = "admin@arjun.local";
+  const username = "admin";
   const password = process.env.SEED_ADMIN_PASSWORD;
 
   if (!password) {
@@ -23,7 +23,7 @@ async function seed() {
   const [existing] = await db
     .select()
     .from(usuarios)
-    .where(eq(usuarios.email, email))
+    .where(eq(usuarios.username, username))
     .limit(1);
 
   if (existing) {
@@ -35,12 +35,12 @@ async function seed() {
 
   await db.insert(usuarios).values({
     nombre: "Admin",
-    email,
+    username,
     passwordHash,
     rol: "admin",
   });
 
-  console.log("✅ Usuario admin creado:", email);
+  console.log("✅ Usuario admin creado:", username);
   process.exit(0);
 }
 

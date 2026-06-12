@@ -1,5 +1,6 @@
 {
   "s01_infraestructura": false,
   "s02_auth": false,
-  "s03_query_compras": false
+  "s03_query_compras": false,
+  "s04_reconciliacion_table": false
 }

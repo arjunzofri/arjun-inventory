@@ -39,7 +39,7 @@ vida.clientes.kcodclie  <--  vida.movidcto.kcodcli2
 
 ## Tablas propias en Neon Arjun
 
-- usuarios (id, nombre, email, password_hash, rol, activo, created_at)
+- usuarios (id, nombre, username, password_hash, rol, activo, created_at)
 - conteos_fisicos (id, codigo_producto, unidades_fisicas, usuario_id, created_at, updated_at)
 - audit_log (id, usuario_id, accion, codigo_producto, valor_anterior, valor_nuevo, created_at)
 
@@ -56,13 +56,29 @@ vida.clientes.kcodclie  <--  vida.movidcto.kcodcli2
 
 ## Estado actual
 
-- Último slice completado: S03 — Query compras Anil (2026-06-11)
-- Próximo slice: S04 — Tabla de reconciliación (UI con las 6 columnas)
-- Feature flags activos: s01_infraestructura, s02_auth, s03_query_compras
+- **Último slice completado**: S04 — Tabla de reconciliación (UI con las 6 columnas) (2026-06-12)
+- **Próximo slice**: S05 — Conteo físico (input editable por fila, upsert conteos_fisicos, audit_log)
+- **Feature flags activos**: s01_infraestructura, s02_auth, s03_query_compras, s04_reconciliacion_table
+- **Commits**: d818f52 (S01), 34eb0a8 (S02 + S03), S04 pendiente de commit
+
+### Cambios fuera de slice
+- Auth migrado de email a username (`lib/auth.ts`, `db/arjun/schema.ts`, login page, seed)
+- Conexiones Drizzle lazy (Proxy) para evitar crash en build sin `.env.local`
+- `drizzle-kit push --force` no funciona sin TTY — usar SQL directo para rename de columnas
+
+### Cómo correr
+```bash
+npm run dev            # http://localhost:3000
+npx tsx db/arjun/seed.ts   # crea usuario admin (username: admin)
+```
+- Login: usuario `admin` + contraseña definida en `SEED_ADMIN_PASSWORD` de `.env.local`
+- `GET /api/reconciliacion` devuelve datos reales de Vida Digital
 
 ## Notas técnicas abiertas
 
-- Verificar si las compras de Anil están también en esquema sanjh además de vida.
-  Claude Code debe correr esta query antes del slice S03:
-  SELECT COUNT(*) FROM sanjh.movidcto WHERE tipomovi='V' AND kcodcli2 IN (2,20,218)
-- Si hay registros en sanjh, la query principal del PRD necesita UNION con sanjh.itemdcto
+- Verificar si las compras de Anil están también en esquema `sanjh` además de `vida`.
+  Query pendiente:
+  ```sql
+  SELECT COUNT(*) FROM sanjh.movidcto WHERE tipomovi='V' AND kcodcli2 IN (2,20,218);
+  ```
+- Si hay registros en sanjh, la query de `db/vidadigital/queries.ts` necesita UNION con `sanjh.itemdcto`

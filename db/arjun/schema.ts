@@ -6,6 +6,7 @@ import {
   boolean,
   timestamp,
   pgEnum,
+  unique,
 } from "drizzle-orm/pg-core";
 
 export const rolEnum = pgEnum("rol", ["admin", "bodeguero"]);
@@ -38,3 +39,18 @@ export const auditLog = pgTable("audit_log", {
   valorNuevo: integer("valor_nuevo"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
+
+export const pisoEnum = pgEnum("piso", ["A", "B", "C", "D", "E"]);
+
+export const conteosFisicosIngreso = pgTable("conteos_fisicos_ingreso", {
+  id: serial("id").primaryKey(),
+  codigoProducto: text("codigo_producto").notNull(),
+  nroingreso: text("nroingreso").notNull(),
+  unidadesFisicas: integer("unidades_fisicas").notNull(),
+  piso: pisoEnum("piso"),
+  usuarioId: integer("usuario_id").references(() => usuarios.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (t) => ({
+  unico: unique().on(t.codigoProducto, t.nroingreso),
+}));

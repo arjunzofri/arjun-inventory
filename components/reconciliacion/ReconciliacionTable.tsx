@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import type { ReconciliacionRow } from "@/db/vidadigital/queries";
 import {
   Table,
@@ -11,35 +11,53 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { ConteoFisicoInput } from "./ConteoFisicoInput";
+import { PisoSelect } from "./PisoSelect";
 import { cn } from "@/lib/utils";
 
 interface Props {
   data: ReconciliacionRow[];
   initialConteos: Record<string, number>;
+  initialConteosIngreso: Record<string, { unidades: number; piso: string | null }>;
 }
 
-/** Formatea un número con separadores de miles. */
-function fmt(n: number | null | undefined): string {
+// ── Helpers ──────────────────────────────────────────────────────────
+
+function fmt(n: number | string | null | undefined): string {
   if (n == null) return "—";
-  return n.toLocaleString("es-CL");
+  const num = typeof n === "string" ? parseFloat(n) : n;
+  if (isNaN(num)) return "—";
+  return num.toLocaleString("es-CL");
 }
 
-/** Diferencia Zofri - Compras (columna 4). */
-function diffZofri(row: ReconciliacionRow): number {
-  return row.saldo_zofri_unidades - row.total_unidades_compradas;
+function fmtFecha(iso: string): string {
+  const d = new Date(iso + "T12:00:00");
+  return d.toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-/** Sugerencia de cajas completas de Anil (columna 6). */
-function sugerenciaCajas(row: ReconciliacionRow): number {
+function saldoZofriTotal(row: ReconciliacionRow): number {
+  const ingresos = row.ingresos ?? [];
+  if (ingresos.length === 0) return row.saldo_zofri_unidades;
+  return ingresos.reduce((sum, ing) => sum + ing.saldo_zofri_unidades, 0);
+}
+
+function diffZofri(row: ReconciliacionRow, zofri: number): number {
+  return zofri - row.total_unidades_compradas;
+}
+
+function correspondeAnil(row: ReconciliacionRow, conteo: number | undefined, zofri: number): number | null {
+  if (conteo == null) return null;
+  return Math.min(row.total_unidades_compradas, Math.max(0, conteo - zofri));
+}
+
+function cajasAnil(row: ReconciliacionRow, corresponde: number): number {
   if (!row.packing || row.packing <= 0) return 0;
-  return Math.floor(row.total_unidades_compradas / row.packing);
+  return Math.floor(corresponde / row.packing);
 }
 
-/** Color y signo para diferencias. */
 function diffColor(n: number): string {
-  if (n > 0) return "text-emerald-600";
-  if (n < 0) return "text-red-600";
-  return "text-muted-foreground";
+  if (n > 0) return "text-[#38a169]";
+  if (n < 0) return "text-[#e53e3e]";
+  return "text-[#718096]";
 }
 
 function diffSign(n: number): string {
@@ -47,127 +65,484 @@ function diffSign(n: number): string {
   return fmt(n);
 }
 
-export function ReconciliacionTable({ data, initialConteos }: Props) {
-  const [conteos, setConteos] =
-    useState<Record<string, number>>(initialConteos);
+interface EstadoAnil { color: string; tooltip: string; }
 
-  const handleSave = useCallback(
-    (codigo: string, value: number) => {
-      setConteos((prev) => ({ ...prev, [codigo]: value }));
+function estadoAnil(conteo: number | undefined, saldoZofri: number): EstadoAnil | null {
+  if (conteo == null) return null;
+  if (conteo > saldoZofri) return { color: "text-[#38a169]", tooltip: "Hay sobrante para Anil" };
+  if (conteo > 0 && conteo < saldoZofri) return { color: "text-[#e53e3e]", tooltip: "Físico menor que Zofri, algo no cuadra" };
+  if (conteo > 0 && conteo <= saldoZofri) return { color: "text-[#d69e2e]", tooltip: "Todo lo físico es de Vida Digital, Anil tiene 0 en bodega" };
+  return null;
+}
+
+function fechaMasReciente(row: ReconciliacionRow): string {
+  if (!row.compras || row.compras.length === 0) return "";
+  return row.compras[0].fechanvt;
+}
+
+/** Extraer número central del ingreso: "101-25-000123-01-GLP" → "000123" */
+function numeroIngreso(nro: string): string {
+  const parts = nro.split("-");
+  if (parts.length >= 3) return parts[2];
+  return nro;
+}
+
+// ── Componente ───────────────────────────────────────────────────────
+
+export function ReconciliacionTable({ data, initialConteos, initialConteosIngreso }: Props) {
+  const [conteos, setConteos] = useState<Record<string, number>>(initialConteos);
+  const [conteosIngreso, setConteosIngreso] = useState(initialConteosIngreso);
+  const [nvExpanded, setNvExpanded] = useState<Set<string>>(new Set());
+  const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
+
+  // Cargar estado expandido desde localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("reconciliacion-expanded");
+      if (stored) {
+        const arr = JSON.parse(stored);
+        if (Array.isArray(arr)) setExpandedProducts(new Set(arr));
+      }
+    } catch { /* noop */ }
+  }, []);
+
+  // ── Search & filters ─────────────────────────────────────────────
+  const [search, setSearch] = useState("");
+  const [filtroAnio, setFiltroAnio] = useState("");        // "" = todos
+  const [filtroBodega, setFiltroBodega] = useState("");     // "" = todas
+  const [filtroPiso, setFiltroPiso] = useState("");          // "" = todos, "sin" = sin piso
+  const [filtroSaldoZofri, setFiltroSaldoZofri] = useState(""); // "" | ">0" | "=0"
+  const [filtroSaldoAnil, setFiltroSaldoAnil] = useState("");   // "" | "sobrante" | "sin" | "alerta"
+  const [filtroConteo, setFiltroConteo] = useState("");         // "" | "con" | "sin"
+  const filtersActive = search || filtroAnio || filtroBodega || filtroPiso ||
+    filtroSaldoZofri || filtroSaldoAnil || filtroConteo;
+
+  const clearFilters = useCallback(() => {
+    setSearch("");
+    setFiltroAnio("");
+    setFiltroBodega("");
+    setFiltroPiso("");
+    setFiltroSaldoZofri("");
+    setFiltroSaldoAnil("");
+    setFiltroConteo("");
+  }, []);
+
+  const handleSave = useCallback((codigo: string, value: number) => {
+    setConteos((prev) => ({ ...prev, [codigo]: value }));
+  }, []);
+
+  const handleSaveIngreso = useCallback(
+    (codigo: string, nroingreso: string, unidades: number, piso: string | null) => {
+      const key = `${codigo}|${nroingreso}`;
+      setConteosIngreso((prev) => ({ ...prev, [key]: { unidades, piso } }));
     },
     [],
   );
 
+  const toggleExpand = useCallback((codigo: string) => {
+    setExpandedProducts((prev) => {
+      const next = new Set(prev);
+      if (next.has(codigo)) next.delete(codigo);
+      else next.add(codigo);
+      try { localStorage.setItem("reconciliacion-expanded", JSON.stringify([...next])); } catch { /* noop */ }
+      return next;
+    });
+  }, []);
+
+  /** Extraer año de una fecha ISO: "2025-12-10" → "2025" */
+  function anioDeFecha(iso: string): string {
+    return iso.slice(0, 4);
+  }
+
+  // Años disponibles (de las notas de venta / compras), descendente
+  const aniosUnicos = useMemo(() => {
+    const set = new Set<string>();
+    data.forEach((r) => r.compras?.forEach((c) => {
+      if (c.fechanvt) set.add(anioDeFecha(c.fechanvt));
+    }));
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [data]);
+
+  // Filtrar + ordenar
+  const sorted = useMemo(() => {
+    const term = search.toLowerCase().trim();
+
+    return [...data]
+      .filter((row) => {
+        // Búsqueda textual
+        if (term) {
+          const matchCodigo = row.codigo.toLowerCase().includes(term);
+          const matchDetalle = row.detalle.toLowerCase().includes(term);
+          if (!matchCodigo && !matchDetalle) return false;
+        }
+
+        // Filtros de ingreso: si están activos, al menos un ingreso debe pasar
+        const ingresos = row.ingresos ?? [];
+        const hasIngresos = ingresos.length > 0;
+
+        // Año de compra (nota de venta)
+        if (filtroAnio) {
+          const compras = row.compras ?? [];
+          if (!compras.some((c) => anioDeFecha(c.fechanvt) === filtroAnio)) return false;
+        }
+
+        // Ingresos (para filtros de bodega/piso)
+        if (filtroBodega && hasIngresos) {
+          if (!ingresos.some((ing) => ing.bodega_nombre === filtroBodega)) return false;
+        }
+
+        if (filtroBodega && hasIngresos) {
+          if (!ingresos.some((ing) => ing.bodega_nombre === filtroBodega)) return false;
+        }
+
+        if (filtroPiso && hasIngresos) {
+          if (filtroPiso === "sin") {
+            if (!ingresos.some((ing) => {
+              const key = `${row.codigo}|${ing.nroingreso}`;
+              return !conteosIngreso[key]?.piso;
+            })) return false;
+          } else {
+            if (!ingresos.some((ing) => {
+              const key = `${row.codigo}|${ing.nroingreso}`;
+              return conteosIngreso[key]?.piso === filtroPiso;
+            })) return false;
+          }
+        }
+
+        // Saldo Zofri (suma de ingresos)
+        const zofriF = saldoZofriTotal(row);
+        if (filtroSaldoZofri === ">0" && zofriF <= 0) return false;
+        if (filtroSaldoZofri === "=0" && zofriF !== 0) return false;
+
+        // Saldo Anil (basado en correspondeAnil)
+        const conteoF = conteos[row.codigo];
+        const corrF = correspondeAnil(row, conteoF, zofriF);
+        if (filtroSaldoAnil === "sobrante" && (corrF == null || corrF <= 0)) return false;
+        if (filtroSaldoAnil === "sin" && (corrF == null || corrF > 0)) return false;
+        if (filtroSaldoAnil === "alerta") {
+          if (conteoF == null || conteoF >= zofriF) return false;
+        }
+
+        // Conteo físico
+        if (filtroConteo === "con" && conteos[row.codigo] == null) return false;
+        if (filtroConteo === "sin" && conteos[row.codigo] != null) return false;
+
+        return true;
+      })
+      .sort((a, b) => {
+        const aDate = fechaMasReciente(a);
+        const bDate = fechaMasReciente(b);
+        if (!aDate && !bDate) return 0;
+        if (!aDate) return 1;
+        if (!bDate) return -1;
+        return bDate.localeCompare(aDate);
+      });
+  }, [data, search, filtroAnio, filtroBodega, filtroPiso, filtroSaldoZofri, filtroSaldoAnil, filtroConteo, conteos, conteosIngreso]);
+
   const totalConteos = Object.keys(conteos).length;
+  const totalProducts = data.length;
+  const visibleProducts = sorted.length;
 
   return (
-    <div className="rounded-lg border bg-card shadow-sm">
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="min-w-[200px]">Producto</TableHead>
-              <TableHead className="text-right">Compras Anil</TableHead>
-              <TableHead className="text-right">Saldo Zofri</TableHead>
-              <TableHead className="text-right">Conteo físico</TableHead>
-              <TableHead className="text-right">
-                Dif. Zofri vs Compras
-              </TableHead>
-              <TableHead className="text-right">
-                Dif. Físico vs Compras
-              </TableHead>
-              <TableHead className="text-right">
-                Sugerencia cajas
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.map((row) => {
-              const diffZ = diffZofri(row);
-              const cajas = sugerenciaCajas(row);
-              const conteo = conteos[row.codigo];
-              const diffF =
-                conteo != null
-                  ? conteo - row.total_unidades_compradas
-                  : null;
+    <div>
+      {/* Search & Filters */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {/* Search */}
+        <div className="relative flex-1 min-w-[200px] max-w-[320px]">
+          <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#b8bec7]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          <input
+            type="text"
+            placeholder="Buscar producto…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-9 w-full rounded-xl border-0 bg-[#e8ecef] pl-9 pr-8 text-sm text-[#2d3748] shadow-neumorph-inset placeholder:text-[#b8bec7] focus:outline-none focus:ring-2 focus:ring-[#38a169]/50"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#b8bec7] hover:text-[#718096] text-lg leading-none cursor-pointer"
+              title="Limpiar búsqueda"
+            >
+              ×
+            </button>
+          )}
+        </div>
 
-              return (
-                <TableRow key={row.codigo}>
-                  {/* Producto */}
-                  <TableCell>
-                    <div className="font-medium">{row.detalle}</div>
-                    <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-                      <span>Cód: {row.codigo}</span>
-                      <span>Pack: {fmt(row.packing)}</span>
-                      {row.umed && <span>{row.umed}</span>}
-                    </div>
-                  </TableCell>
+        {/* Año */}
+        <select value={filtroAnio} onChange={(e) => setFiltroAnio(e.target.value)}
+          className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50 cursor-pointer">
+          <option value="">Todos los años</option>
+          {aniosUnicos.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
 
-                  {/* Compras Anil */}
-                  <TableCell className="text-right tabular-nums">
-                    <div>{fmt(row.total_unidades_compradas)} unid</div>
-                    <div className="text-xs text-muted-foreground">
-                      {fmt(row.total_cajas_compradas)} cajas
-                    </div>
-                  </TableCell>
+        {/* Bodega */}
+        <select value={filtroBodega} onChange={(e) => setFiltroBodega(e.target.value)}
+          className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50 cursor-pointer">
+          <option value="">Todas las bodegas</option>
+          <option value="Bodega 1">Bodega 1</option>
+          <option value="Bodega 2">Bodega 2</option>
+        </select>
 
-                  {/* Saldo Zofri */}
-                  <TableCell className="text-right tabular-nums">
-                    <div>{fmt(row.saldo_zofri_unidades)} unid</div>
-                    <div className="text-xs text-muted-foreground">
-                      {fmt(row.saldo_zofri_cajas)} cajas
-                    </div>
-                  </TableCell>
+        {/* Piso */}
+        <select value={filtroPiso} onChange={(e) => setFiltroPiso(e.target.value)}
+          className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50 cursor-pointer">
+          <option value="">Todos los pisos</option>
+          <option value="A">Piso A</option>
+          <option value="B">Piso B</option>
+          <option value="C">Piso C</option>
+          <option value="D">Piso D</option>
+          <option value="E">Piso E</option>
+          <option value="sin">Sin piso asignado</option>
+        </select>
 
-                  {/* Conteo físico */}
-                  <TableCell className="text-right">
-                    <ConteoFisicoInput
-                      codigo={row.codigo}
-                      initialValue={conteo ?? null}
-                      onSave={handleSave}
-                    />
-                  </TableCell>
+        {/* Saldo Zofri */}
+        <select value={filtroSaldoZofri} onChange={(e) => setFiltroSaldoZofri(e.target.value)}
+          className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50 cursor-pointer">
+          <option value="">Saldo Zofri</option>
+          <option value=">0">Con saldo Zofri &gt; 0</option>
+          <option value="=0">Sin saldo Zofri (= 0)</option>
+        </select>
 
-                  {/* Diferencia Zofri - Compras */}
-                  <TableCell
-                    className={cn(
-                      "text-right tabular-nums font-medium",
-                      diffColor(diffZ),
-                    )}
-                  >
-                    {diffSign(diffZ)} unid
-                  </TableCell>
+        {/* Saldo Anil */}
+        <select value={filtroSaldoAnil} onChange={(e) => setFiltroSaldoAnil(e.target.value)}
+          className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50 cursor-pointer">
+          <option value="">Saldo Anil</option>
+          <option value="sobrante">Con saldo a favor de Anil</option>
+          <option value="sin">Sin saldo para Anil</option>
+          <option value="alerta">Alerta (físico &lt; Zofri)</option>
+        </select>
 
-                  {/* Diferencia Físico - Compras */}
-                  <TableCell
-                    className={cn(
-                      "text-right tabular-nums font-medium",
-                      diffF != null && diffColor(diffF),
-                    )}
-                  >
-                    {diffF != null
-                      ? `${diffSign(diffF)} unid`
-                      : "—"}
-                  </TableCell>
+        {/* Conteo físico */}
+        <select value={filtroConteo} onChange={(e) => setFiltroConteo(e.target.value)}
+          className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50 cursor-pointer">
+          <option value="">Conteo Físico</option>
+          <option value="con">Con conteo ingresado</option>
+          <option value="sin">Sin conteo ingresado</option>
+        </select>
 
-                  {/* Sugerencia cajas */}
-                  <TableCell className="text-right tabular-nums">
-                    {cajas > 0 ? `${fmt(cajas)} cajas` : "—"}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+        {/* Clear filters */}
+        {filtersActive && (
+          <button type="button" onClick={clearFilters}
+            className="h-9 rounded-xl bg-[#e8ecef] px-3 text-xs font-medium text-[#718096] shadow-neumorph-sm hover:bg-white hover:text-[#e53e3e] transition-all cursor-pointer whitespace-nowrap">
+            Limpiar filtros
+          </button>
+        )}
       </div>
 
-      <div className="flex justify-between border-t px-4 py-2 text-xs text-muted-foreground">
-        <span>
-          {data.length} producto{data.length !== 1 ? "s" : ""}
-        </span>
-        <span>
-          {totalConteos} contado{totalConteos !== 1 ? "s" : ""}
-        </span>
+      {/* Filter badge */}
+      {filtersActive && (
+        <div className="mb-3 text-xs text-[#718096]">
+          <span className="font-medium text-[#2d3748]">{visibleProducts}</span> de{" "}
+          <span className="font-medium text-[#2d3748]">{totalProducts}</span> productos
+        </div>
+      )}
+
+      {/* Leyenda */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-0.5 text-xs text-[#718096]">
+        <span><span className="text-[#38a169]">●</span> Hay sobrante para Anil (físico &gt; Zofri)</span>
+        <span><span className="text-[#d69e2e]">●</span> Todo de Vida Digital, Anil = 0 (físico ≤ Zofri)</span>
+        <span><span className="text-[#e53e3e]">●</span> Algo no cuadra (físico &lt; Zofri)</span>
+        <span>● Sin conteo físico</span>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl bg-white shadow-neumorph">
+        <div className="overflow-x-auto">
+          <Table className="table-fixed">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[280px]">Productos Comprados</TableHead>
+                <TableHead className="w-[110px] text-right">Cantidad que Compró Anil</TableHead>
+                <TableHead className="w-[110px] text-right">Saldo en Zofri</TableHead>
+                <TableHead className="w-[140px] text-right">Conteo Físico</TableHead>
+                <TableHead className="w-[110px] text-right">Zofri vs Anil</TableHead>
+                <TableHead className="w-[110px] text-right">Físico vs Anil</TableHead>
+                <TableHead className="w-[110px] text-right">Físico vs Zofri</TableHead>
+                <TableHead className="w-[140px] text-right">Cuánto Corresponde a Anil</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.flatMap((row) => {
+                const zofri = saldoZofriTotal(row);
+                const diffZ = diffZofri(row, zofri);
+                const conteo = conteos[row.codigo];
+                const corr = correspondeAnil(row, conteo, zofri);
+                const corrCajas = corr != null ? cajasAnil(row, corr) : null;
+                const corrEstado = estadoAnil(conteo, zofri);
+                const diffF = conteo != null ? conteo - row.total_unidades_compradas : null;
+                const diffFZ = conteo != null ? conteo - zofri : null;
+                const isExpanded = expandedProducts.has(row.codigo);
+                const ingresos = row.ingresos ?? [];
+
+                const rows: React.ReactNode[] = [];
+
+                // ── Fila resumen ──
+                rows.push(
+                  <TableRow
+                    key={row.codigo}
+                    className="cursor-pointer hover:bg-[#e8ecef]/30 transition-colors"
+                    onClick={() => ingresos.length > 0 && toggleExpand(row.codigo)}
+                    title={ingresos.length > 0 ? (isExpanded ? "Ocultar ingresos" : "Mostrar ingresos") : undefined}
+                  >
+                    {/* Producto */}
+                    <TableCell className="w-[280px]">
+                      <div className="flex items-center gap-1.5">
+                        {ingresos.length > 0 && (
+                          <span className="text-[10px] text-[#718096] shrink-0 transition-transform duration-150">
+                            {isExpanded ? "▼" : "▶"}
+                          </span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium text-sm truncate text-[#2d3748]" title={row.detalle}>
+                            {row.detalle}
+                          </div>
+                          <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-[#718096]">
+                            <span>Cód: {row.codigo}</span>
+                            <span>Pack: {fmt(row.packing)}</span>
+                            {row.umed && <span>{row.umed}</span>}
+                          </div>
+                        </div>
+                      </div>
+                      {row.compras && row.compras.length > 0 && (
+                        <div className="mt-1 space-y-0.5">
+                          {(nvExpanded.has(row.codigo) ? row.compras : row.compras.slice(0, 2)).map((c) => (
+                            <div key={c.knumfoli} className="text-xs text-[#718096]">
+                              <span className="font-mono tabular-nums">NV {c.knumfoli}</span>
+                              {" "}— {fmtFecha(c.fechanvt)} ({c.empresa}) — {fmt(c.unidades)} unid
+                            </div>
+                          ))}
+                          {row.compras.length > 2 && (
+                            <button type="button" className="text-xs text-[#38a169]/70 hover:text-[#38a169] cursor-pointer"
+                              onClick={(e) => { e.stopPropagation(); setNvExpanded((prev) => { const next = new Set(prev); if (next.has(row.codigo)) next.delete(row.codigo); else next.add(row.codigo); return next; }); }}>
+                              {nvExpanded.has(row.codigo) ? "Mostrar menos" : `+${row.compras.length - 2} más`}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </TableCell>
+                    {/* Compras Anil */}
+                    <TableCell className="w-[110px] text-right tabular-nums">
+                      <div className="text-sm">{fmt(row.total_unidades_compradas)} unid</div>
+                      <div className="text-xs text-[#718096]">{fmt(row.total_cajas_compradas)} cajas</div>
+                    </TableCell>
+                    {/* Saldo Zofri */}
+                    <TableCell className="w-[110px] text-right tabular-nums">
+                      <div className="text-sm">{fmt(zofri)} unid</div>
+                      <div className="text-xs text-[#718096]">
+                        {fmt(row.packing > 0 ? Math.floor(zofri / row.packing) : 0)} cajas
+                      </div>
+                    </TableCell>
+                    {/* Conteo físico */}
+                    <TableCell className="w-[140px] text-right" onClick={(e) => e.stopPropagation()}>
+                      <ConteoFisicoInput codigo={row.codigo} initialValue={conteo ?? null} onSave={handleSave} />
+                    </TableCell>
+                    {/* Zofri vs Anil */}
+                    <TableCell className={cn("w-[110px] text-right tabular-nums font-medium text-sm", diffColor(diffZ))}>
+                      {diffSign(diffZ)} unid
+                    </TableCell>
+                    {/* Físico vs Anil */}
+                    <TableCell className={cn("w-[110px] text-right tabular-nums font-medium text-sm", diffF != null && diffColor(diffF))}>
+                      {diffF != null ? `${diffSign(diffF)} unid` : "—"}
+                    </TableCell>
+                    {/* Físico vs Zofri */}
+                    <TableCell className={cn("w-[110px] text-right tabular-nums font-medium text-sm", diffFZ != null && diffColor(diffFZ))}>
+                      {diffFZ != null ? `${diffSign(diffFZ)} unid` : "—"}
+                    </TableCell>
+                    {/* Corresponde a Anil */}
+                    <TableCell className="w-[140px] text-right tabular-nums" onClick={(e) => e.stopPropagation()}>
+                      {corr != null ? (
+                        <div className="flex flex-col items-end gap-0.5" title={corrEstado?.tooltip}>
+                          <div className={cn("text-sm font-medium", corrEstado?.color)}>
+                            {corrEstado ? "● " : ""}{fmt(corr)} unid
+                          </div>
+                          {corrCajas != null && corrCajas > 0 && (
+                            <div className="text-xs text-[#718096]">{fmt(corrCajas)} cajas</div>
+                          )}
+                        </div>
+                      ) : "—"}
+                    </TableCell>
+                  </TableRow>
+                );
+
+                // ── Sub-filas por ingreso ──
+                if (isExpanded) {
+                  ingresos.forEach((ing) => {
+                    // Filtrar sub-filas por bodega y piso (año es a nivel compra)
+                    if (filtroBodega && ing.bodega_nombre !== filtroBodega) return;
+
+                    const key = `${row.codigo}|${ing.nroingreso}`;
+                    const ci = conteosIngreso[key];
+
+                    if (filtroPiso) {
+                      const pisoVal = ci?.piso;
+                      if (filtroPiso === "sin" && pisoVal) return;
+                      if (filtroPiso !== "sin" && pisoVal !== filtroPiso) return;
+                    }
+                    const ingUnidades = ci?.unidades ?? null;
+                    const ingPiso = ci?.piso ?? null;
+                    const ingDiffFZ = ingUnidades != null ? ingUnidades - ing.saldo_zofri_unidades : null;
+
+                    rows.push(
+                      <TableRow key={`${row.codigo}-${ing.nroingreso}`} className="bg-[#f4f5f7] hover:bg-[#edf0f2] border-b border-[#dde1e6]/40">
+                        {/* Ingreso info */}
+                        <TableCell className="w-[280px] pl-10 border-l-2 border-[#38a169]/30">
+                          <div className="text-xs font-medium text-[#2d3748]">
+                            Ingreso{" "}
+                            <span className="font-mono tabular-nums">{numeroIngreso(ing.nroingreso)}</span>
+                          </div>
+                          <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-[#718096]">
+                            <span>Año: 20{ing.anio}</span>
+                            <span>{ing.bodega_nombre}</span>
+                          </div>
+                        </TableCell>
+                        {/* Compras Anil (no aplica) */}
+                        <TableCell className="w-[110px] text-right text-xs text-[#b8bec7]">—</TableCell>
+                        {/* Saldo Zofri */}
+                        <TableCell className="w-[110px] text-right text-xs tabular-nums text-[#2d3748]">
+                          {fmt(ing.saldo_zofri_unidades)} unid
+                        </TableCell>
+                        {/* Conteo físico (ingreso) */}
+                        <TableCell className="w-[140px] text-right">
+                          <ConteoFisicoInput
+                            codigo={row.codigo}
+                            nroingreso={ing.nroingreso}
+                            initialValue={ingUnidades}
+                            onSave={(codigo, valor) => handleSaveIngreso(codigo, ing.nroingreso, valor, ingPiso ?? null)}
+                          />
+                        </TableCell>
+                        {/* Piso (reemplaza Zofri vs Anil en sub-filas) */}
+                        <TableCell className="w-[110px] text-right">
+                          <PisoSelect
+                            codigo={row.codigo}
+                            nroingreso={ing.nroingreso}
+                            unidadesActuales={ingUnidades}
+                            initialPiso={ingPiso}
+                            onSave={handleSaveIngreso}
+                          />
+                        </TableCell>
+                        {/* Físico vs Anil (no aplica) */}
+                        <TableCell className="w-[110px] text-right text-xs text-[#b8bec7]">—</TableCell>
+                        {/* Físico vs Zofri (ingreso) */}
+                        <TableCell className={cn("w-[110px] text-right text-xs tabular-nums font-medium", ingDiffFZ != null && diffColor(ingDiffFZ))}>
+                          {ingDiffFZ != null ? `${diffSign(ingDiffFZ)} unid` : "—"}
+                        </TableCell>
+                        {/* Corresponde a Anil (no aplica) */}
+                        <TableCell className="w-[140px] text-right text-xs text-[#b8bec7]">—</TableCell>
+                      </TableRow>
+                    );
+                  });
+                }
+
+                return rows;
+              })}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="flex justify-between border-t border-[#dde1e6] bg-[#e8ecef]/30 px-4 py-2.5 text-xs text-[#718096]">
+          <span>{sorted.length} producto{sorted.length !== 1 ? "s" : ""}</span>
+          <span>{totalConteos} contado{totalConteos !== 1 ? "s" : ""}</span>
+        </div>
       </div>
     </div>
   );

@@ -5,5 +5,7 @@ export const config = {
     "/(dashboard)/:path*",
     "/api/reconciliacion/:path*",
     "/api/conteo-fisico/:path*",
+    "/api/conteo-fisico-ingreso/:path*",
+    "/api/usuarios/:path*",
   ],
 };

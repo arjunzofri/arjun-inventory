@@ -34,13 +34,12 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/reconciliacion");
-    router.refresh();
+    router.replace("/reconciliacion");
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-sm">
+      <Card className="w-full max-w-sm shadow-neumorph rounded-2xl border-0">
         <CardHeader>
           <CardTitle className="text-center text-xl">
             Arjun Inventory
@@ -72,7 +71,7 @@ export default function LoginPage() {
             {error && (
               <p className="text-sm text-destructive">{error}</p>
             )}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full btn-neumorph rounded-xl" disabled={loading}>
               {loading ? "Ingresando…" : "Ingresar"}
             </Button>
           </form>

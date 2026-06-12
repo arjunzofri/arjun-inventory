@@ -8,6 +8,8 @@ interface Props {
   codigo: string;
   initialValue: number | null;
   onSave: (codigo: string, value: number) => void;
+  /** Si se pasa, guarda en /api/conteo-fisico-ingreso en vez de /api/conteo-fisico */
+  nroingreso?: string;
 }
 
 type Mode = "idle" | "editing" | "saving";
@@ -16,7 +18,7 @@ function fmt(n: number): string {
   return n.toLocaleString("es-CL");
 }
 
-export function ConteoFisicoInput({ codigo, initialValue, onSave }: Props) {
+export function ConteoFisicoInput({ codigo, initialValue, onSave, nroingreso }: Props) {
   const [mode, setMode] = useState<Mode>("idle");
   const [value, setValue] = useState<number | null>(initialValue);
   const [draft, setDraft] = useState("");
@@ -60,11 +62,18 @@ export function ConteoFisicoInput({ codigo, initialValue, onSave }: Props) {
     setError(null);
 
     try {
-      const res = await fetch("/api/conteo-fisico", {
+      const url = nroingreso
+        ? "/api/conteo-fisico-ingreso"
+        : "/api/conteo-fisico";
+      const body = nroingreso
+        ? { codigo_producto: codigo, nroingreso, unidades_fisicas: n, piso: null }
+        : { codigo_producto: codigo, unidades_fisicas: n };
+
+      const res = await fetch(url, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ codigo_producto: codigo, unidades_fisicas: n }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -80,7 +89,7 @@ export function ConteoFisicoInput({ codigo, initialValue, onSave }: Props) {
       setMode("editing");
       inputRef.current?.focus();
     }
-  }, [draft, codigo, onSave, cancelEdit]);
+  }, [draft, codigo, nroingreso, onSave, cancelEdit]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -108,10 +117,11 @@ export function ConteoFisicoInput({ codigo, initialValue, onSave }: Props) {
             step="1"
             inputMode="numeric"
             className={cn(
-              "h-8 w-24 rounded border bg-background px-2 text-right text-sm tabular-nums",
-              "focus:outline-none focus:ring-2 focus:ring-ring",
-              error && "border-destructive",
-              mode === "saving" && "opacity-50",
+              "h-9 w-24 rounded-xl border-0 bg-[#e8ecef] px-3 text-right text-sm tabular-nums text-[#2d3748]",
+              "shadow-neumorph-inset placeholder:text-[#b8bec7]",
+              "focus:outline-none focus:ring-2 focus:ring-[#38a169]/50",
+              error && "ring-2 ring-[#e53e3e]/50",
+              mode === "saving" && "opacity-60",
             )}
             value={draft}
             onChange={(e) => {
@@ -140,10 +150,10 @@ export function ConteoFisicoInput({ codigo, initialValue, onSave }: Props) {
       type="button"
       onClick={enterEdit}
       className={cn(
-        "inline-block min-w-[6rem] cursor-pointer rounded px-2 py-1 text-right text-sm tabular-nums",
-        "hover:bg-muted/80 transition-colors",
-        "focus:outline-none focus:ring-2 focus:ring-ring",
-        value == null && "text-muted-foreground",
+        "btn-neumorph inline-block min-w-[6rem] cursor-pointer rounded-xl bg-[#e8ecef]/60 px-3 py-1.5 text-right text-sm tabular-nums text-[#2d3748]",
+        "hover:bg-white",
+        "focus:outline-none focus:ring-2 focus:ring-[#38a169]/50",
+        value == null && "text-[#b8bec7]",
       )}
     >
       {value != null ? (

@@ -56,10 +56,10 @@ vida.clientes.kcodclie  <--  vida.movidcto.kcodcli2
 
 ## Estado actual
 
-- **Último slice completado**: S04 — Tabla de reconciliación (UI con las 6 columnas) (2026-06-12)
-- **Próximo slice**: S05 — Conteo físico (input editable por fila, upsert conteos_fisicos, audit_log)
-- **Feature flags activos**: s01_infraestructura, s02_auth, s03_query_compras, s04_reconciliacion_table
-- **Commits**: d818f52 (S01), 34eb0a8 (S02 + S03), S04 pendiente de commit
+- **Último slice completado**: S05 — Conteo físico (2026-06-12)
+- **Próximo slice**: S06 — Cálculo de diferencias y sugerencias (columnas 4, 5 y 6 con lógica completa)
+- **Feature flags activos**: s01_infraestructura, s02_auth, s03_query_compras, s04_reconciliacion_table, s05_conteo_fisico
+- **Commits**: d818f52 (S01), 34eb0a8 (S02 + S03), S04 y S05 pendientes de commit
 
 ### Cambios fuera de slice
 - Auth migrado de email a username (`lib/auth.ts`, `db/arjun/schema.ts`, login page, seed)

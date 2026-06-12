@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import type { ReconciliacionRow } from "@/db/vidadigital/queries";
 import {
   Table,
@@ -9,10 +10,12 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
+import { ConteoFisicoInput } from "./ConteoFisicoInput";
 import { cn } from "@/lib/utils";
 
 interface Props {
   data: ReconciliacionRow[];
+  initialConteos: Record<string, number>;
 }
 
 /** Formatea un número con separadores de miles. */
@@ -44,7 +47,19 @@ function diffSign(n: number): string {
   return fmt(n);
 }
 
-export function ReconciliacionTable({ data }: Props) {
+export function ReconciliacionTable({ data, initialConteos }: Props) {
+  const [conteos, setConteos] =
+    useState<Record<string, number>>(initialConteos);
+
+  const handleSave = useCallback(
+    (codigo: string, value: number) => {
+      setConteos((prev) => ({ ...prev, [codigo]: value }));
+    },
+    [],
+  );
+
+  const totalConteos = Object.keys(conteos).length;
+
   return (
     <div className="rounded-lg border bg-card shadow-sm">
       <div className="overflow-x-auto">
@@ -59,14 +74,22 @@ export function ReconciliacionTable({ data }: Props) {
                 Dif. Zofri vs Compras
               </TableHead>
               <TableHead className="text-right">
+                Dif. Físico vs Compras
+              </TableHead>
+              <TableHead className="text-right">
                 Sugerencia cajas
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {data.map((row) => {
-              const diff = diffZofri(row);
+              const diffZ = diffZofri(row);
               const cajas = sugerenciaCajas(row);
+              const conteo = conteos[row.codigo];
+              const diffF =
+                conteo != null
+                  ? conteo - row.total_unidades_compradas
+                  : null;
 
               return (
                 <TableRow key={row.codigo}>
@@ -96,19 +119,35 @@ export function ReconciliacionTable({ data }: Props) {
                     </div>
                   </TableCell>
 
-                  {/* Conteo físico — pendiente S05 */}
-                  <TableCell className="text-center text-muted-foreground">
-                    —
+                  {/* Conteo físico */}
+                  <TableCell className="text-right">
+                    <ConteoFisicoInput
+                      codigo={row.codigo}
+                      initialValue={conteo ?? null}
+                      onSave={handleSave}
+                    />
                   </TableCell>
 
                   {/* Diferencia Zofri - Compras */}
                   <TableCell
                     className={cn(
                       "text-right tabular-nums font-medium",
-                      diffColor(diff),
+                      diffColor(diffZ),
                     )}
                   >
-                    {diffSign(diff)} unid
+                    {diffSign(diffZ)} unid
+                  </TableCell>
+
+                  {/* Diferencia Físico - Compras */}
+                  <TableCell
+                    className={cn(
+                      "text-right tabular-nums font-medium",
+                      diffF != null && diffColor(diffF),
+                    )}
+                  >
+                    {diffF != null
+                      ? `${diffSign(diffF)} unid`
+                      : "—"}
                   </TableCell>
 
                   {/* Sugerencia cajas */}
@@ -122,8 +161,13 @@ export function ReconciliacionTable({ data }: Props) {
         </Table>
       </div>
 
-      <div className="border-t px-4 py-2 text-xs text-muted-foreground">
-        {data.length} producto{data.length !== 1 ? "s" : ""}
+      <div className="flex justify-between border-t px-4 py-2 text-xs text-muted-foreground">
+        <span>
+          {data.length} producto{data.length !== 1 ? "s" : ""}
+        </span>
+        <span>
+          {totalConteos} contado{totalConteos !== 1 ? "s" : ""}
+        </span>
       </div>
     </div>
   );

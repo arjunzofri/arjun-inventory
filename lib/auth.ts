@@ -11,6 +11,7 @@ declare module "next-auth" {
   }
   interface Session {
     user: DefaultSession["user"] & {
+      id?: string;
       rol?: string;
     };
   }
@@ -54,13 +55,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   callbacks: {
     jwt({ token, user }) {
-      if (user?.rol) {
+      if (user) {
+        token.id = user.id;
         (token as any).rol = user.rol;
       }
       return token;
     },
     session({ session, token }) {
       if (session.user) {
+        session.user.id = token.id as string;
         (session.user as any).rol = (token as any).rol ?? null;
       }
       return session;

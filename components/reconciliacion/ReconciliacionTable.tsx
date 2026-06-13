@@ -406,15 +406,34 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
             <TableBody>
               {sorted.flatMap((row) => {
                 const zofri = saldoZofriTotal(row);
-                const diffZ = diffZofri(row, zofri);
-                const conteo = conteos[row.codigo];
-                const corr = correspondeAnil(row, conteo, zofri);
-                const corrCajas = corr != null ? cajasAnil(row, corr) : null;
-                const corrEstado = estadoAnil(conteo, zofri);
-                const diffF = conteo != null ? conteo - row.total_unidades_compradas : null;
-                const diffFZ = conteo != null ? conteo - zofri : null;
-                const isExpanded = expandedProducts.has(row.codigo);
                 const ingresos = row.ingresos ?? [];
+
+                // Total conteo físico = suma de conteos por ingreso
+                let totalConteoFisico: number | undefined;
+                let hasConteoIngreso = false;
+                if (ingresos.length > 0) {
+                  let sum = 0;
+                  let any = false;
+                  ingresos.forEach((ing) => {
+                    const ci = conteosIngreso[`${row.codigo}|${ing.nroingreso}`];
+                    if (ci?.unidades != null) {
+                      sum += ci.unidades;
+                      any = true;
+                    }
+                  });
+                  if (any) {
+                    totalConteoFisico = sum;
+                    hasConteoIngreso = true;
+                  }
+                }
+
+                const diffZ = diffZofri(row, zofri);
+                const corr = correspondeAnil(row, totalConteoFisico, zofri);
+                const corrCajas = corr != null ? cajasAnil(row, corr) : null;
+                const corrEstado = estadoAnil(totalConteoFisico, zofri);
+                const diffF = totalConteoFisico != null ? totalConteoFisico - row.total_unidades_compradas : null;
+                const diffFZ = totalConteoFisico != null ? totalConteoFisico - zofri : null;
+                const isExpanded = expandedProducts.has(row.codigo);
 
                 const rows: React.ReactNode[] = [];
 
@@ -475,8 +494,8 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
                       </div>
                     </TableCell>
                     {/* Conteo físico */}
-                    <TableCell className="w-[140px] text-right" onClick={(e) => e.stopPropagation()}>
-                      <ConteoFisicoInput codigo={row.codigo} initialValue={conteo ?? null} onSave={handleSave} />
+                    <TableCell className="w-[140px] text-right tabular-nums">
+                      <span className="text-sm">{hasConteoIngreso ? `${fmt(totalConteoFisico)} unid` : "—"}</span>
                     </TableCell>
                     {/* Zofri vs Anil */}
                     <TableCell className={cn("w-[110px] text-right tabular-nums font-medium text-sm", diffColor(diffZ))}>

@@ -1,20 +1,17 @@
 import { NextResponse } from "next/server";
-import { getToken } from "@auth/core/jwt";
+import { auth } from "@/lib/auth";
 import { upsertConteoFisicoIngreso } from "@/db/arjun/queries";
 
 const PISO_VALUES = ["A", "B", "C", "D", "E"] as const;
 
 export async function POST(request: Request) {
-  const token = await getToken({
-    req: request,
-    secret: process.env.NEXTAUTH_SECRET,
-  });
+  const session = await auth();
 
-  if (!token?.id && !token?.sub) {
+  if (!session?.user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const usuarioId = parseInt((token.id ?? token.sub) as string, 10);
+  const usuarioId = parseInt((session.user as any).id, 10);
 
   if (isNaN(usuarioId)) {
     return NextResponse.json({ error: "Sesión inválida" }, { status: 400 });

@@ -13,6 +13,7 @@ import {
 import { ConteoFisicoInput } from "./ConteoFisicoInput";
 import { PisoSelect } from "./PisoSelect";
 import { cn } from "@/lib/utils";
+import { Package } from "lucide-react";
 
 interface Props {
   data: ReconciliacionRow[];
@@ -88,6 +89,28 @@ function numeroIngreso(nro: string): string {
 }
 
 // ── Componente ───────────────────────────────────────────────────────
+
+function ProductImage({ codigo }: { codigo: string }) {
+  const [error, setError] = useState(false);
+  const url = `https://res.cloudinary.com/dxkidwxjl/image/upload/productos/${codigo}.jpg`;
+
+  if (error) {
+    return (
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[#e8ecef]">
+        <Package className="h-5 w-5 text-[#b8bec7]" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={url}
+      alt={codigo}
+      className="h-12 w-12 shrink-0 rounded-lg object-cover"
+      onError={() => setError(true)}
+    />
+  );
+}
 
 export function ReconciliacionTable({ data, initialConteos, initialConteosIngreso }: Props) {
   const [conteos, setConteos] = useState<Record<string, number>>(initialConteos);
@@ -446,21 +469,26 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
                     title={ingresos.length > 0 ? (isExpanded ? "Ocultar ingresos" : "Mostrar ingresos") : undefined}
                   >
                     {/* Producto */}
-                    <TableCell className="w-[280px] sticky left-0 bg-white z-10">
-                      <div className="flex items-center gap-1.5">
-                        {ingresos.length > 0 && (
-                          <span className="text-[10px] text-[#718096] shrink-0 transition-transform duration-150">
-                            {isExpanded ? "▼" : "▶"}
-                          </span>
-                        )}
+                    <TableCell className="w-[340px] sticky left-0 bg-white z-10">
+                      <div className="flex items-start gap-3">
+                        <ProductImage codigo={row.codigo} />
                         <div className="min-w-0 flex-1">
-                          <div className="font-medium text-sm truncate text-[#2d3748]" title={row.detalle}>
-                            {row.detalle}
-                          </div>
-                          <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-[#718096]">
-                            <span>Cód: {row.codigo}</span>
-                            <span>Pack: {fmt(row.packing)}</span>
-                            {row.umed && <span>{row.umed}</span>}
+                          <div className="flex items-center gap-1.5">
+                            {ingresos.length > 0 && (
+                              <span className="text-[10px] text-[#718096] shrink-0 transition-transform duration-150">
+                                {isExpanded ? "▼" : "▶"}
+                              </span>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium text-sm truncate text-[#2d3748]" title={row.detalle}>
+                                {row.detalle}
+                              </div>
+                              <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-[#718096]">
+                                <span>Cód: {row.codigo}</span>
+                                <span>Pack: {fmt(row.packing)}</span>
+                                {row.umed && <span>{row.umed}</span>}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>

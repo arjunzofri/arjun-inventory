@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import { hash } from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/arjun";
-import { usuarios, auditLog } from "@/db/arjun/schema";
+import { usuarios, auditLog, conteosFisicos, conteosFisicosIngreso } from "@/db/arjun/schema";
 
 export async function PATCH(
   request: Request,
@@ -65,6 +65,8 @@ export async function DELETE(
     if (!user) return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
 
     await db.delete(auditLog).where(eq(auditLog.usuarioId, userId));
+    await db.delete(conteosFisicosIngreso).where(eq(conteosFisicosIngreso.usuarioId, userId));
+    await db.delete(conteosFisicos).where(eq(conteosFisicos.usuarioId, userId));
     await db.delete(usuarios).where(eq(usuarios.id, userId));
 
     return NextResponse.json({ ok: true });

@@ -39,7 +39,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-sm shadow-neumorph rounded-2xl border-0">
+      <Card className="mx-4 w-full sm:max-w-sm shadow-neumorph rounded-2xl border-0">
         <CardHeader>
           <CardTitle className="text-center text-xl">
             Arjun Inventory

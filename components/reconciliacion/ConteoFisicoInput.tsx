@@ -117,7 +117,7 @@ export function ConteoFisicoInput({ codigo, initialValue, onSave, nroingreso }: 
             step="1"
             inputMode="numeric"
             className={cn(
-              "h-9 w-24 rounded-xl border-0 bg-[#e8ecef] px-3 text-right text-sm tabular-nums text-[#2d3748]",
+              "min-h-[44px] sm:h-9 w-24 sm:w-24 rounded-xl border-0 bg-[#e8ecef] px-3 text-right text-base sm:text-sm tabular-nums text-[#2d3748]",
               "shadow-neumorph-inset placeholder:text-[#b8bec7]",
               "focus:outline-none focus:ring-2 focus:ring-[#38a169]/50",
               error && "ring-2 ring-[#e53e3e]/50",
@@ -150,7 +150,7 @@ export function ConteoFisicoInput({ codigo, initialValue, onSave, nroingreso }: 
       type="button"
       onClick={enterEdit}
       className={cn(
-        "btn-neumorph inline-block min-w-[6rem] cursor-pointer rounded-xl bg-[#e8ecef]/60 px-3 py-1.5 text-right text-sm tabular-nums text-[#2d3748]",
+        "btn-neumorph inline-block min-w-[7rem] sm:min-w-[6rem] cursor-pointer rounded-xl bg-[#e8ecef]/60 px-3 py-2.5 sm:py-1.5 text-right text-base sm:text-sm tabular-nums text-[#2d3748] min-h-[44px] sm:min-h-0",
         "hover:bg-white",
         "focus:outline-none focus:ring-2 focus:ring-[#38a169]/50",
         value == null && "text-[#b8bec7]",

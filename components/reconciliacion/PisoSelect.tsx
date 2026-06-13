@@ -49,7 +49,7 @@ export function PisoSelect({ codigo, nroingreso, unidadesActuales, initialPiso, 
   return (
     <div className="flex flex-col items-end gap-0.5">
       <select
-        className="h-8 w-16 rounded-lg border-0 bg-[#e8ecef] px-1.5 text-xs text-[#2d3748] shadow-neumorph-inset focus:outline-none focus:ring-2 focus:ring-[#38a169]/50 disabled:opacity-50"
+        className="h-11 sm:h-8 w-20 sm:w-16 rounded-xl border-0 bg-[#e8ecef] px-2 sm:px-1.5 text-base sm:text-xs text-[#2d3748] shadow-neumorph-inset focus:outline-none focus:ring-2 focus:ring-[#38a169]/50 disabled:opacity-50"
         value={piso ?? "—"}
         onChange={handleChange}
         disabled={saving}

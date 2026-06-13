@@ -94,6 +94,7 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
   const [conteosIngreso, setConteosIngreso] = useState(initialConteosIngreso);
   const [nvExpanded, setNvExpanded] = useState<Set<string>>(new Set());
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
+  const [showFilters, setShowFilters] = useState(false);
 
   // Cargar estado expandido desde localStorage
   useEffect(() => {
@@ -246,7 +247,48 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
   return (
     <div>
       {/* Search & Filters */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      {/* Mobile: toggle + search */}
+      <div className="mb-3 flex items-center gap-2 sm:hidden">
+        <div className="relative flex-1">
+          <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#b8bec7]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          <input
+            type="text"
+            placeholder="Buscar producto…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-11 w-full rounded-xl border-0 bg-[#e8ecef] pl-9 pr-8 text-base text-[#2d3748] shadow-neumorph-inset placeholder:text-[#b8bec7] focus:outline-none focus:ring-2 focus:ring-[#38a169]/50"
+          />
+          {search && (
+            <button type="button" onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#b8bec7] hover:text-[#718096] text-lg leading-none cursor-pointer">×</button>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowFilters((p) => !p)}
+          className="btn-neumorph flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#e8ecef] text-[#718096]"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+        </button>
+      </div>
+
+      {/* Mobile: filter drawer */}
+      {showFilters && (
+        <div className="mb-3 sm:hidden">
+          <div className="rounded-2xl bg-white shadow-neumorph p-4 space-y-3">{/* filter selects go here, copied below */}</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <select value={filtroAnio} onChange={(e) => setFiltroAnio(e.target.value)} className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50"><option value="">Año</option>{aniosUnicos.map(a => <option key={a} value={a}>{a}</option>)}</select>
+            <select value={filtroBodega} onChange={(e) => setFiltroBodega(e.target.value)} className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50"><option value="">Bodega</option><option value="Bodega 1">Bodega 1</option><option value="Bodega 2">Bodega 2</option></select>
+            <select value={filtroPiso} onChange={(e) => setFiltroPiso(e.target.value)} className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50"><option value="">Piso</option><option value="A">Piso A</option><option value="B">Piso B</option><option value="C">Piso C</option><option value="D">Piso D</option><option value="E">Piso E</option><option value="sin">Sin piso</option></select>
+            <select value={filtroSaldoZofri} onChange={(e) => setFiltroSaldoZofri(e.target.value)} className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50"><option value="">Saldo Zofri</option><option value=">0">Con saldo &gt; 0</option><option value="=0">Sin saldo (= 0)</option></select>
+            <select value={filtroSaldoAnil} onChange={(e) => setFiltroSaldoAnil(e.target.value)} className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50"><option value="">Saldo Anil</option><option value="sobrante">A favor de Anil</option><option value="sin">Sin saldo Anil</option><option value="alerta">Alerta</option></select>
+            <select value={filtroConteo} onChange={(e) => setFiltroConteo(e.target.value)} className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50"><option value="">Conteo Físico</option><option value="con">Con conteo</option><option value="sin">Sin conteo</option></select>
+            {filtersActive && <button type="button" onClick={clearFilters} className="h-9 rounded-xl bg-[#e8ecef] px-3 text-xs font-medium text-[#718096] shadow-neumorph-sm">Limpiar</button>}
+          </div>
+        </div>
+      )}
+
+      {/* Desktop: always-visible filters */}
+      <div className="mb-3 hidden sm:flex flex-wrap items-center gap-2">
         {/* Search */}
         <div className="relative flex-1 min-w-[200px] max-w-[320px]">
           <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#b8bec7]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
@@ -351,7 +393,7 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
           <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[280px]">Productos Comprados</TableHead>
+                <TableHead className="w-[280px] sticky left-0 bg-white z-10">Productos Comprados</TableHead>
                 <TableHead className="w-[110px] text-right">Cantidad que Compró Anil</TableHead>
                 <TableHead className="w-[110px] text-right">Saldo en Zofri</TableHead>
                 <TableHead className="w-[140px] text-right">Conteo Físico</TableHead>
@@ -385,7 +427,7 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
                     title={ingresos.length > 0 ? (isExpanded ? "Ocultar ingresos" : "Mostrar ingresos") : undefined}
                   >
                     {/* Producto */}
-                    <TableCell className="w-[280px]">
+                    <TableCell className="w-[280px] sticky left-0 bg-white z-10">
                       <div className="flex items-center gap-1.5">
                         {ingresos.length > 0 && (
                           <span className="text-[10px] text-[#718096] shrink-0 transition-transform duration-150">
@@ -483,9 +525,9 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
                     const ingDiffFZ = ingUnidades != null ? ingUnidades - ing.saldo_zofri_unidades : null;
 
                     rows.push(
-                      <TableRow key={`${row.codigo}-${ing.nroingreso}`} className="bg-[#f4f5f7] hover:bg-[#edf0f2] border-b border-[#dde1e6]/40">
+                      <TableRow key={`${row.codigo}-${ing.nroingreso}`} className="bg-[#f4f5f7] hover:bg-[#edf0f2] border-b border-[#dde1e6]/40 flex flex-col sm:table-row">
                         {/* Ingreso info */}
-                        <TableCell className="w-[280px] pl-10 border-l-2 border-[#38a169]/30">
+                        <TableCell className="sm:w-[280px] pl-10 border-l-2 border-[#38a169]/30 block sm:table-cell">
                           <div className="text-xs font-medium text-[#2d3748]">
                             Ingreso{" "}
                             <span className="font-mono tabular-nums">{numeroIngreso(ing.nroingreso)}</span>
@@ -496,13 +538,14 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
                           </div>
                         </TableCell>
                         {/* Compras Anil (no aplica) */}
-                        <TableCell className="w-[110px] text-right text-xs text-[#b8bec7]">—</TableCell>
+                        <TableCell className="block sm:table-cell sm:w-[110px] text-right text-xs text-[#b8bec7] pt-1 sm:pt-0">—</TableCell>
                         {/* Saldo Zofri */}
-                        <TableCell className="w-[110px] text-right text-xs tabular-nums text-[#2d3748]">
+                        <TableCell className="block sm:table-cell sm:w-[110px] text-right text-xs tabular-nums text-[#2d3748] pt-1 sm:pt-0">
+                          <span className="sm:hidden text-[10px] text-[#718096] mr-1">Saldo Zofri:</span>
                           {fmt(ing.saldo_zofri_unidades)} unid
                         </TableCell>
                         {/* Conteo físico (ingreso) */}
-                        <TableCell className="w-[140px] text-right">
+                        <TableCell className="block sm:table-cell sm:w-[140px] text-right pt-1.5 sm:pt-0">
                           <ConteoFisicoInput
                             codigo={row.codigo}
                             nroingreso={ing.nroingreso}
@@ -511,7 +554,7 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
                           />
                         </TableCell>
                         {/* Piso (reemplaza Zofri vs Anil en sub-filas) */}
-                        <TableCell className="w-[110px] text-right">
+                        <TableCell className="block sm:table-cell sm:w-[110px] text-right pt-1.5 sm:pt-0">
                           <PisoSelect
                             codigo={row.codigo}
                             nroingreso={ing.nroingreso}
@@ -520,14 +563,15 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
                             onSave={handleSaveIngreso}
                           />
                         </TableCell>
-                        {/* Físico vs Anil (no aplica) */}
-                        <TableCell className="w-[110px] text-right text-xs text-[#b8bec7]">—</TableCell>
+                        {/* Físico vs Anil (no aplica) — hidden on mobile */}
+                        <TableCell className="hidden sm:table-cell sm:w-[110px] text-right text-xs text-[#b8bec7]">—</TableCell>
                         {/* Físico vs Zofri (ingreso) */}
-                        <TableCell className={cn("w-[110px] text-right text-xs tabular-nums font-medium", ingDiffFZ != null && diffColor(ingDiffFZ))}>
+                        <TableCell className={cn("block sm:table-cell sm:w-[110px] text-right text-xs tabular-nums font-medium pt-1 sm:pt-0", ingDiffFZ != null && diffColor(ingDiffFZ))}>
+                          <span className="sm:hidden text-[10px] text-[#718096] mr-1">Físico vs Zofri:</span>
                           {ingDiffFZ != null ? `${diffSign(ingDiffFZ)} unid` : "—"}
                         </TableCell>
-                        {/* Corresponde a Anil (no aplica) */}
-                        <TableCell className="w-[140px] text-right text-xs text-[#b8bec7]">—</TableCell>
+                        {/* Corresponde a Anil (no aplica) — hidden on mobile */}
+                        <TableCell className="hidden sm:table-cell sm:w-[140px] text-right text-xs text-[#b8bec7]">—</TableCell>
                       </TableRow>
                     );
                   });

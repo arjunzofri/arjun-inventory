@@ -46,24 +46,29 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } },
 ) {
-  const session = await auth();
-  if ((session?.user as any)?.rol !== "admin") {
-    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  try {
+    const session = await auth();
+    if ((session?.user as any)?.rol !== "admin") {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+    }
+
+    const userId = parseInt(params.id, 10);
+    if (isNaN(userId)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+
+    // No permitir eliminar el propio usuario
+    const currentUserId = parseInt((session!.user as any).id, 10);
+    if (userId === currentUserId) {
+      return NextResponse.json({ error: "No podés eliminar tu propio usuario" }, { status: 403 });
+    }
+
+    const [user] = await db.select().from(usuarios).where(eq(usuarios.id, userId)).limit(1);
+    if (!user) return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+
+    await db.delete(usuarios).where(eq(usuarios.id, userId));
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("Error en DELETE usuario:", error);
+    return NextResponse.json({ error: "Error al eliminar" }, { status: 500 });
   }
-
-  const userId = parseInt(params.id, 10);
-  if (isNaN(userId)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
-
-  // No permitir eliminar el propio usuario
-  const currentUserId = parseInt((session!.user as any).id, 10);
-  if (userId === currentUserId) {
-    return NextResponse.json({ error: "No podés eliminar tu propio usuario" }, { status: 403 });
-  }
-
-  const [user] = await db.select().from(usuarios).where(eq(usuarios.id, userId)).limit(1);
-  if (!user) return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
-
-  await db.delete(usuarios).where(eq(usuarios.id, userId));
-
-  return NextResponse.json({ ok: true });
 }

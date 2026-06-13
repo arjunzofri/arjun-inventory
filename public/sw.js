@@ -4,6 +4,13 @@ const CACHE_PAGES  = "arjun-pages-v1";
 const STATIC_PATTERN = /\/_next\/static\//;
 const API_PATTERN    = /\/api\//;
 
+// ── Development: pass-through on localhost ─────────────────────────────
+if (self.location.hostname === "localhost") {
+  self.addEventListener("fetch", (e) => e.respondWith(fetch(e.request)));
+  // eslint-disable-next-line no-extra-semi
+  return;
+}
+
 // ── Install: precache shell ──────────────────────────────────────────
 self.addEventListener("install", (event) => {
   event.waitUntil(

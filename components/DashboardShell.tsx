@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/Sidebar";
 
 interface Props {
@@ -10,8 +10,6 @@ interface Props {
 }
 
 const STORAGE_KEY = "sidebar-collapsed";
-const EXPANDED_ML = 260;
-const COLLAPSED_ML = 72;
 
 export function DashboardShell({ userName, userRol, children }: Props) {
   const [collapsed, setCollapsed] = useState(false);
@@ -19,38 +17,26 @@ export function DashboardShell({ userName, userRol, children }: Props) {
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === "true") setCollapsed(true);
+      if (localStorage.getItem(STORAGE_KEY) === "true") setCollapsed(true);
     } catch { /* noop */ }
     setMounted(true);
-
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) setCollapsed(e.newValue === "true");
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  const onToggle = useCallback((nowCollapsed: boolean) => {
-    setCollapsed(nowCollapsed);
-  }, []);
-
-  const ml = !mounted ? EXPANDED_ML : collapsed ? COLLAPSED_ML : EXPANDED_ML;
+  const sidebarWidth = collapsed ? 72 : 260;
 
   return (
     <div className="flex min-h-screen bg-[#e8ecef]">
-      <Sidebar
-        userName={userName}
-        userRol={userRol}
-        collapsed={collapsed}
-        onToggle={onToggle}
-      />
+      <div style={{ display: mounted ? "contents" : "none" }}>
+        <Sidebar
+          userName={userName}
+          userRol={userRol}
+          collapsed={collapsed}
+          onToggle={setCollapsed}
+        />
+      </div>
       <main
-        className="flex-1 p-6"
-        style={{
-          marginLeft: ml,
-          transition: "margin-left 200ms ease",
-        }}
+        className="flex-1 p-4 sm:p-6 pb-20 sm:pb-6"
+        style={{ marginLeft: mounted ? sidebarWidth : 0, transition: "margin-left 200ms ease" }}
       >
         {children}
       </main>

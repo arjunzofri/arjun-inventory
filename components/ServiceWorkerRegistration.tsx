@@ -5,6 +5,13 @@ import { useEffect } from "react";
 export function ServiceWorkerRegistration() {
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    if (process.env.NODE_ENV === "development") {
+      // No SW in dev — it caches stale bundles and causes hydration mismatches
+      navigator.serviceWorker.getRegistrations().then((regs) =>
+        regs.forEach((r) => r.unregister())
+      );
+      return;
+    }
 
     navigator.serviceWorker
       .register("/sw.js", { scope: "/" })

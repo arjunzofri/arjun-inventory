@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
-import { getToken } from "@auth/core/jwt";
+import { auth } from "@/lib/auth";
 import { hash } from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/arjun";
 import { usuarios } from "@/db/arjun/schema";
 
-function isAdmin(token: any): boolean {
-  return token?.rol === "admin";
-}
-
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } },
 ) {
-  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
-  if (!isAdmin(token)) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  const session = await auth();
+  if ((session?.user as any)?.rol !== "admin") {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  }
 
   const userId = parseInt(params.id, 10);
   if (isNaN(userId)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
@@ -48,15 +46,16 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } },
 ) {
-  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
-  if (!isAdmin(token)) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  const session = await auth();
+  if ((session?.user as any)?.rol !== "admin") {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  }
 
   const userId = parseInt(params.id, 10);
   if (isNaN(userId)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
 
   // No permitir eliminar el propio usuario
-  if (!token) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  const currentUserId = parseInt((token.id ?? token.sub) as string, 10);
+  const currentUserId = parseInt((session!.user as any).id, 10);
   if (userId === currentUserId) {
     return NextResponse.json({ error: "No podés eliminar tu propio usuario" }, { status: 403 });
   }

@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
-import { getToken } from "@auth/core/jwt";
+import { auth } from "@/lib/auth";
 import { hash } from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/arjun";
 import { usuarios } from "@/db/arjun/schema";
 
-function isAdmin(token: any): boolean {
-  return token?.rol === "admin";
-}
-
-export async function GET(request: Request) {
-  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
-  if (!isAdmin(token)) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+export async function GET() {
+  const session = await auth();
+  if ((session?.user as any)?.rol !== "admin") {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  }
 
   const rows = await db
     .select({
@@ -28,8 +26,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
-  if (!isAdmin(token)) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  const session = await auth();
+  if ((session?.user as any)?.rol !== "admin") {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  }
 
   const body = await request.json().catch(() => null);
   if (!body?.username || !body?.password || !body?.rol) {

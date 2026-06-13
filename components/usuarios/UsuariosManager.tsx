@@ -86,7 +86,7 @@ export function UsuariosManager({ currentUserId }: Props) {
   };
 
   const handleDelete = async (u: Usuario) => {
-    if (!confirm(`¿Eliminar a ${u.username}? Esta acción no se puede deshacer.`)) return;
+    if (!confirm(`¿Eliminar a ${u.username}? Su historial de cambios también se eliminará. Si solo querés quitarle el acceso, es mejor desactivarlo.`)) return;
     try {
       const res = await fetch(`/api/usuarios/${u.id}`, { method: "DELETE", credentials: "include" });
       if (!res.ok) {

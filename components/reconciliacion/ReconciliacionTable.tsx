@@ -17,6 +17,8 @@ interface Props {
   data: ReconciliacionRow[];
 }
 
+const TOGGLE_KEY = "arjun-reconciliacion-mostrar-comparativas";
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function fmt(n: number | string | null | undefined): string {
@@ -124,9 +126,25 @@ function ProductImage({ codigo }: { codigo: string }) {
 }
 
 export function ReconciliacionTable({ data }: Props) {
+  const [mostrarComparativas, setMostrarComparativas] = useState(false);
   const [nvExpanded, setNvExpanded] = useState<Set<string>>(new Set());
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
+
+  // Leer toggle comparativas desde localStorage (solo cliente)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(TOGGLE_KEY);
+      if (stored === "true") setMostrarComparativas(true);
+    } catch { /* noop */ }
+  }, []);
+
+  // Persistir toggle comparativas a localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(TOGGLE_KEY, String(mostrarComparativas));
+    } catch { /* noop */ }
+  }, [mostrarComparativas]);
 
   // Cargar estado expandido desde localStorage
   useEffect(() => {
@@ -375,6 +393,20 @@ export function ReconciliacionTable({ data }: Props) {
             Limpiar filtros
           </button>
         )}
+
+        {/* Toggle comparativas */}
+        <button
+          type="button"
+          onClick={() => setMostrarComparativas((p) => !p)}
+          className={cn(
+            "h-9 rounded-xl px-3 text-xs font-medium shadow-neumorph-sm transition-all cursor-pointer whitespace-nowrap",
+            mostrarComparativas
+              ? "bg-[#38a169] text-white hover:bg-[#2f8a59]"
+              : "bg-[#e8ecef] text-[#718096] hover:bg-white",
+          )}
+        >
+          {mostrarComparativas ? "Ocultar comparativas" : "Mostrar comparativas"}
+        </button>
       </div>
 
       {/* Filter badge */}
@@ -402,9 +434,16 @@ export function ReconciliacionTable({ data }: Props) {
                 <TableHead className="w-[110px] text-right">Cantidad que Compró Anil</TableHead>
                 <TableHead className="w-[110px] text-right">Saldo en Zofri</TableHead>
                 <TableHead className="w-[140px] text-right">Conteo Físico</TableHead>
-                <TableHead className="w-[110px] text-right">Zofri vs Anil</TableHead>
-                <TableHead className="w-[110px] text-right">Físico vs Anil</TableHead>
-                <TableHead className="w-[110px] text-right">Físico vs Zofri</TableHead>
+                <TableHead className="w-[110px] text-right">Ubicación</TableHead>
+                {mostrarComparativas && (
+                  <TableHead className="w-[110px] text-right">Zofri vs Anil</TableHead>
+                )}
+                {mostrarComparativas && (
+                  <TableHead className="w-[110px] text-right">Físico vs Anil</TableHead>
+                )}
+                {mostrarComparativas && (
+                  <TableHead className="w-[110px] text-right">Físico vs Zofri</TableHead>
+                )}
                 <TableHead className="w-[140px] text-right">Cuánto Corresponde a Anil</TableHead>
               </TableRow>
             </TableHeader>
@@ -492,18 +531,26 @@ export function ReconciliacionTable({ data }: Props) {
                     <TableCell className="w-[140px] text-right tabular-nums">
                       <span className="text-sm">{hasConteoIngreso ? `${fmt(totalConteoFisico)} unid` : "—"}</span>
                     </TableCell>
+                    {/* Ubicación (no aplica a nivel producto — se ve en sub-filas) */}
+                    <TableCell className="w-[110px] text-right text-sm text-[#b8bec7]">—</TableCell>
                     {/* Zofri vs Anil */}
-                    <TableCell className={cn("w-[110px] text-right tabular-nums font-medium text-sm", diffColor(diffZ))}>
-                      {diffSign(diffZ)} unid
-                    </TableCell>
+                    {mostrarComparativas && (
+                      <TableCell className={cn("w-[110px] text-right tabular-nums font-medium text-sm", diffColor(diffZ))}>
+                        {diffSign(diffZ)} unid
+                      </TableCell>
+                    )}
                     {/* Físico vs Anil */}
-                    <TableCell className={cn("w-[110px] text-right tabular-nums font-medium text-sm", diffF != null && diffColor(diffF))}>
-                      {diffF != null ? `${diffSign(diffF)} unid` : "—"}
-                    </TableCell>
+                    {mostrarComparativas && (
+                      <TableCell className={cn("w-[110px] text-right tabular-nums font-medium text-sm", diffF != null && diffColor(diffF))}>
+                        {diffF != null ? `${diffSign(diffF)} unid` : "—"}
+                      </TableCell>
+                    )}
                     {/* Físico vs Zofri */}
-                    <TableCell className={cn("w-[110px] text-right tabular-nums font-medium text-sm", diffFZ != null && diffColor(diffFZ))}>
-                      {diffFZ != null ? `${diffSign(diffFZ)} unid` : "—"}
-                    </TableCell>
+                    {mostrarComparativas && (
+                      <TableCell className={cn("w-[110px] text-right tabular-nums font-medium text-sm", diffFZ != null && diffColor(diffFZ))}>
+                        {diffFZ != null ? `${diffSign(diffFZ)} unid` : "—"}
+                      </TableCell>
+                    )}
                     {/* Corresponde a Anil */}
                     <TableCell className="w-[140px] text-right tabular-nums" onClick={(e) => e.stopPropagation()}>
                       {corr != null ? (
@@ -574,13 +621,21 @@ export function ReconciliacionTable({ data }: Props) {
                             )}
                           </div>
                         </TableCell>
-                        {/* Físico vs Anil (no aplica) — hidden on mobile */}
-                        <TableCell className="hidden sm:table-cell sm:w-[110px] text-right text-xs text-[#b8bec7]">—</TableCell>
+                        {/* Zofri vs Anil (no aplica a nivel ingreso) */}
+                        {mostrarComparativas && (
+                          <TableCell className="hidden sm:table-cell sm:w-[110px] text-right text-xs text-[#b8bec7]">—</TableCell>
+                        )}
+                        {/* Físico vs Anil (no aplica a nivel ingreso) */}
+                        {mostrarComparativas && (
+                          <TableCell className="hidden sm:table-cell sm:w-[110px] text-right text-xs text-[#b8bec7]">—</TableCell>
+                        )}
                         {/* Físico vs Zofri (ingreso) */}
-                        <TableCell className={cn("block sm:table-cell sm:w-[110px] text-right text-xs tabular-nums font-medium pt-1 sm:pt-0", ingDiffFZ != null && diffColor(ingDiffFZ))}>
-                          <span className="sm:hidden text-[10px] text-[#718096] mr-1">Físico vs Zofri:</span>
-                          {ingDiffFZ != null ? `${diffSign(ingDiffFZ)} unid` : "—"}
-                        </TableCell>
+                        {mostrarComparativas && (
+                          <TableCell className={cn("block sm:table-cell sm:w-[110px] text-right text-xs tabular-nums font-medium pt-1 sm:pt-0", ingDiffFZ != null && diffColor(ingDiffFZ))}>
+                            <span className="sm:hidden text-[10px] text-[#718096] mr-1">Físico vs Zofri:</span>
+                            {ingDiffFZ != null ? `${diffSign(ingDiffFZ)} unid` : "—"}
+                          </TableCell>
+                        )}
                         {/* Corresponde a Anil (no aplica) — hidden on mobile */}
                         <TableCell className="hidden sm:table-cell sm:w-[140px] text-right text-xs text-[#b8bec7]">—</TableCell>
                       </TableRow>

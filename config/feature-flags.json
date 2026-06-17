@@ -4,5 +4,6 @@
   "s03_query_compras": false,
   "s04_reconciliacion_table": false,
   "s05_conteo_fisico": false,
-  "s06_ingresos_por_producto": false
+  "s06_ingresos_por_producto": false,
+  "s07_conteo_desde_vida_digital": false
 }

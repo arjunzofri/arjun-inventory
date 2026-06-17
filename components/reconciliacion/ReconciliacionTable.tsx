@@ -10,15 +10,11 @@ import {
   TableHead,
   TableCell,
 } from "@/components/ui/table";
-import { ConteoFisicoInput } from "./ConteoFisicoInput";
-import { PisoSelect } from "./PisoSelect";
 import { cn } from "@/lib/utils";
 import { Package } from "lucide-react";
 
 interface Props {
   data: ReconciliacionRow[];
-  initialConteos: Record<string, number>;
-  initialConteosIngreso: Record<string, { unidades: number; piso: string | null }>;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -81,6 +77,21 @@ function fechaMasReciente(row: ReconciliacionRow): string {
   return row.compras[0].fechanvt;
 }
 
+/** Suma el conteo físico desde los ingresos (nueva fuente: ubicaciones_bodega). */
+function sumConteoFisico(row: ReconciliacionRow): number | undefined {
+  const ingresos = row.ingresos ?? [];
+  if (ingresos.length === 0) return undefined;
+  let sum = 0;
+  let any = false;
+  for (const ing of ingresos) {
+    if (ing.conteo_fisico_unidades != null) {
+      sum += ing.conteo_fisico_unidades;
+      any = true;
+    }
+  }
+  return any ? sum : undefined;
+}
+
 /** Extraer número central del ingreso: "101-25-000123-01-GLP" → "000123" */
 function numeroIngreso(nro: string): string {
   const parts = nro.split("-");
@@ -112,9 +123,7 @@ function ProductImage({ codigo }: { codigo: string }) {
   );
 }
 
-export function ReconciliacionTable({ data, initialConteos, initialConteosIngreso }: Props) {
-  const [conteos, setConteos] = useState<Record<string, number>>(initialConteos);
-  const [conteosIngreso, setConteosIngreso] = useState(initialConteosIngreso);
+export function ReconciliacionTable({ data }: Props) {
   const [nvExpanded, setNvExpanded] = useState<Set<string>>(new Set());
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
@@ -134,34 +143,22 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
   const [search, setSearch] = useState("");
   const [filtroAnio, setFiltroAnio] = useState("");        // "" = todos
   const [filtroBodega, setFiltroBodega] = useState("");     // "" = todas
-  const [filtroPiso, setFiltroPiso] = useState("");          // "" = todos, "sin" = sin piso
+  const [filtroUbicacion, setFiltroUbicacion] = useState("");   // texto libre, ILIKE parcial
   const [filtroSaldoZofri, setFiltroSaldoZofri] = useState(""); // "" | ">0" | "=0"
   const [filtroSaldoAnil, setFiltroSaldoAnil] = useState("");   // "" | "sobrante" | "sin" | "alerta"
   const [filtroConteo, setFiltroConteo] = useState("");         // "" | "con" | "sin"
-  const filtersActive = search || filtroAnio || filtroBodega || filtroPiso ||
+  const filtersActive = search || filtroAnio || filtroBodega || filtroUbicacion ||
     filtroSaldoZofri || filtroSaldoAnil || filtroConteo;
 
   const clearFilters = useCallback(() => {
     setSearch("");
     setFiltroAnio("");
     setFiltroBodega("");
-    setFiltroPiso("");
+    setFiltroUbicacion("");
     setFiltroSaldoZofri("");
     setFiltroSaldoAnil("");
     setFiltroConteo("");
   }, []);
-
-  const handleSave = useCallback((codigo: string, value: number) => {
-    setConteos((prev) => ({ ...prev, [codigo]: value }));
-  }, []);
-
-  const handleSaveIngreso = useCallback(
-    (codigo: string, nroingreso: string, unidades: number, piso: string | null) => {
-      const key = `${codigo}|${nroingreso}`;
-      setConteosIngreso((prev) => ({ ...prev, [key]: { unidades, piso } }));
-    },
-    [],
-  );
 
   const toggleExpand = useCallback((codigo: string) => {
     setExpandedProducts((prev) => {
@@ -215,22 +212,10 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
           if (!ingresos.some((ing) => ing.bodega_nombre === filtroBodega)) return false;
         }
 
-        if (filtroBodega && hasIngresos) {
-          if (!ingresos.some((ing) => ing.bodega_nombre === filtroBodega)) return false;
-        }
-
-        if (filtroPiso && hasIngresos) {
-          if (filtroPiso === "sin") {
-            if (!ingresos.some((ing) => {
-              const key = `${row.codigo}|${ing.nroingreso}`;
-              return !conteosIngreso[key]?.piso;
-            })) return false;
-          } else {
-            if (!ingresos.some((ing) => {
-              const key = `${row.codigo}|${ing.nroingreso}`;
-              return conteosIngreso[key]?.piso === filtroPiso;
-            })) return false;
-          }
+        // Ubicación (texto libre, ILIKE parcial sobre ubicacion_bodega)
+        if (filtroUbicacion && hasIngresos) {
+          const term = filtroUbicacion.toLowerCase();
+          if (!ingresos.some((ing) => (ing.ubicacion_bodega ?? "").toLowerCase().includes(term))) return false;
         }
 
         // Saldo Zofri (suma de ingresos)
@@ -239,7 +224,7 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
         if (filtroSaldoZofri === "=0" && zofriF !== 0) return false;
 
         // Saldo Anil (basado en correspondeAnil)
-        const conteoF = conteos[row.codigo];
+        const conteoF = sumConteoFisico(row);
         const corrF = correspondeAnil(row, conteoF, zofriF);
         if (filtroSaldoAnil === "sobrante" && (corrF == null || corrF <= 0)) return false;
         if (filtroSaldoAnil === "sin" && (corrF == null || corrF > 0)) return false;
@@ -248,8 +233,8 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
         }
 
         // Conteo físico
-        if (filtroConteo === "con" && conteos[row.codigo] == null) return false;
-        if (filtroConteo === "sin" && conteos[row.codigo] != null) return false;
+        if (filtroConteo === "con" && conteoF == null) return false;
+        if (filtroConteo === "sin" && conteoF != null) return false;
 
         return true;
       })
@@ -261,9 +246,9 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
         if (!bDate) return -1;
         return bDate.localeCompare(aDate);
       });
-  }, [data, search, filtroAnio, filtroBodega, filtroPiso, filtroSaldoZofri, filtroSaldoAnil, filtroConteo, conteos, conteosIngreso]);
+  }, [data, search, filtroAnio, filtroBodega, filtroUbicacion, filtroSaldoZofri, filtroSaldoAnil, filtroConteo]);
 
-  const totalConteos = Object.keys(conteos).length;
+  const totalConteos = data.filter((r) => sumConteoFisico(r) != null).length;
   const totalProducts = data.length;
   const visibleProducts = sorted.length;
 
@@ -301,7 +286,7 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <select value={filtroAnio} onChange={(e) => setFiltroAnio(e.target.value)} className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50"><option value="">Año</option>{aniosUnicos.map(a => <option key={a} value={a}>{a}</option>)}</select>
             <select value={filtroBodega} onChange={(e) => setFiltroBodega(e.target.value)} className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50"><option value="">Bodega</option><option value="Bodega 1">Bodega 1</option><option value="Bodega 2">Bodega 2</option></select>
-            <select value={filtroPiso} onChange={(e) => setFiltroPiso(e.target.value)} className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50"><option value="">Piso</option><option value="A">Piso A</option><option value="B">Piso B</option><option value="C">Piso C</option><option value="D">Piso D</option><option value="E">Piso E</option><option value="sin">Sin piso</option></select>
+            <input type="text" placeholder="Ubicación…" value={filtroUbicacion} onChange={(e) => setFiltroUbicacion(e.target.value)} className="h-9 w-32 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-inset placeholder:text-[#b8bec7] focus:outline-none focus:ring-2 focus:ring-[#38a169]/50" />
             <select value={filtroSaldoZofri} onChange={(e) => setFiltroSaldoZofri(e.target.value)} className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50"><option value="">Saldo Zofri</option><option value=">0">Con saldo &gt; 0</option><option value="=0">Sin saldo (= 0)</option></select>
             <select value={filtroSaldoAnil} onChange={(e) => setFiltroSaldoAnil(e.target.value)} className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50"><option value="">Saldo Anil</option><option value="sobrante">A favor de Anil</option><option value="sin">Sin saldo Anil</option><option value="alerta">Alerta</option></select>
             <select value={filtroConteo} onChange={(e) => setFiltroConteo(e.target.value)} className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50"><option value="">Conteo Físico</option><option value="con">Con conteo</option><option value="sin">Sin conteo</option></select>
@@ -349,17 +334,14 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
           <option value="Bodega 2">Bodega 2</option>
         </select>
 
-        {/* Piso */}
-        <select value={filtroPiso} onChange={(e) => setFiltroPiso(e.target.value)}
-          className="h-9 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-sm focus:outline-none focus:ring-2 focus:ring-[#38a169]/50 cursor-pointer">
-          <option value="">Todos los pisos</option>
-          <option value="A">Piso A</option>
-          <option value="B">Piso B</option>
-          <option value="C">Piso C</option>
-          <option value="D">Piso D</option>
-          <option value="E">Piso E</option>
-          <option value="sin">Sin piso asignado</option>
-        </select>
+        {/* Ubicación */}
+        <input
+          type="text"
+          placeholder="Ubicación…"
+          value={filtroUbicacion}
+          onChange={(e) => setFiltroUbicacion(e.target.value)}
+          className="h-9 w-36 rounded-xl border-0 bg-[#e8ecef] px-2.5 text-xs text-[#2d3748] shadow-neumorph-inset placeholder:text-[#b8bec7] focus:outline-none focus:ring-2 focus:ring-[#38a169]/50"
+        />
 
         {/* Saldo Zofri */}
         <select value={filtroSaldoZofri} onChange={(e) => setFiltroSaldoZofri(e.target.value)}
@@ -432,23 +414,8 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
                 const ingresos = row.ingresos ?? [];
 
                 // Total conteo físico = suma de conteos por ingreso
-                let totalConteoFisico: number | undefined;
-                let hasConteoIngreso = false;
-                if (ingresos.length > 0) {
-                  let sum = 0;
-                  let any = false;
-                  ingresos.forEach((ing) => {
-                    const ci = conteosIngreso[`${row.codigo}|${ing.nroingreso}`];
-                    if (ci?.unidades != null) {
-                      sum += ci.unidades;
-                      any = true;
-                    }
-                  });
-                  if (any) {
-                    totalConteoFisico = sum;
-                    hasConteoIngreso = true;
-                  }
-                }
+                const totalConteoFisico = sumConteoFisico(row);
+                const hasConteoIngreso = totalConteoFisico != null;
 
                 const diffZ = diffZofri(row, zofri);
                 const corr = correspondeAnil(row, totalConteoFisico, zofri);
@@ -556,20 +523,16 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
                 // ── Sub-filas por ingreso ──
                 if (isExpanded) {
                   ingresos.forEach((ing) => {
-                    // Filtrar sub-filas por bodega y piso (año es a nivel compra)
+                    // Filtrar sub-filas por bodega y ubicación
                     if (filtroBodega && ing.bodega_nombre !== filtroBodega) return;
 
-                    const key = `${row.codigo}|${ing.nroingreso}`;
-                    const ci = conteosIngreso[key];
-
-                    if (filtroPiso) {
-                      const pisoVal = ci?.piso;
-                      if (filtroPiso === "sin" && pisoVal) return;
-                      if (filtroPiso !== "sin" && pisoVal !== filtroPiso) return;
+                    if (filtroUbicacion) {
+                      const term = filtroUbicacion.toLowerCase();
+                      if (!(ing.ubicacion_bodega ?? "").toLowerCase().includes(term)) return;
                     }
-                    const ingUnidades = ci?.unidades ?? null;
-                    const ingPiso = ci?.piso ?? null;
-                    const ingDiffFZ = ingUnidades != null ? ingUnidades - ing.saldo_zofri_unidades : null;
+
+                    const ingFisico = ing.conteo_fisico_unidades;
+                    const ingDiffFZ = ingFisico != null ? ingFisico - ing.saldo_zofri_unidades : null;
 
                     rows.push(
                       <TableRow key={`${row.codigo}-${ing.nroingreso}`} className="bg-[#f4f5f7] hover:bg-[#edf0f2] border-b border-[#dde1e6]/40 flex flex-col sm:table-row">
@@ -591,24 +554,25 @@ export function ReconciliacionTable({ data, initialConteos, initialConteosIngres
                           <span className="sm:hidden text-[10px] text-[#718096] mr-1">Saldo Zofri:</span>
                           {fmt(ing.saldo_zofri_unidades)} unid
                         </TableCell>
-                        {/* Conteo físico (ingreso) */}
-                        <TableCell className="block sm:table-cell sm:w-[140px] text-right pt-1.5 sm:pt-0">
-                          <ConteoFisicoInput
-                            codigo={row.codigo}
-                            nroingreso={ing.nroingreso}
-                            initialValue={ingUnidades}
-                            onSave={(codigo, valor) => handleSaveIngreso(codigo, ing.nroingreso, valor, ingPiso ?? null)}
-                          />
+                        {/* Conteo físico (read-only, desde Vida Digital) */}
+                        <TableCell className="block sm:table-cell sm:w-[140px] text-right pt-1 sm:pt-0">
+                          <div className="text-sm tabular-nums text-right">
+                            {ingFisico != null ? (
+                              <span className="font-medium text-[#2d3748]">{fmt(ingFisico)} unid</span>
+                            ) : (
+                              <span className="text-[#b8bec7]">Sin contar</span>
+                            )}
+                          </div>
                         </TableCell>
-                        {/* Piso (reemplaza Zofri vs Anil en sub-filas) */}
-                        <TableCell className="block sm:table-cell sm:w-[110px] text-right pt-1.5 sm:pt-0">
-                          <PisoSelect
-                            codigo={row.codigo}
-                            nroingreso={ing.nroingreso}
-                            unidadesActuales={ingUnidades}
-                            initialPiso={ingPiso}
-                            onSave={handleSaveIngreso}
-                          />
+                        {/* Ubicación (read-only, desde Vida Digital) */}
+                        <TableCell className="block sm:table-cell sm:w-[110px] text-right pt-1 sm:pt-0">
+                          <div className="text-xs text-right">
+                            {ing.ubicacion_bodega ? (
+                              <span className="text-[#2d3748]">{ing.ubicacion_bodega}</span>
+                            ) : (
+                              <span className="text-[#b8bec7]">Sin ubicación registrada</span>
+                            )}
+                          </div>
                         </TableCell>
                         {/* Físico vs Anil (no aplica) — hidden on mobile */}
                         <TableCell className="hidden sm:table-cell sm:w-[110px] text-right text-xs text-[#b8bec7]">—</TableCell>

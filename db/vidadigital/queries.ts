@@ -14,6 +14,10 @@ export interface IngresoRow {
   bodega_nombre: string;
   saldo_zofri_unidades: number;
   packing: number;
+  conteo_fisico_unidades: number | null;
+  conteo_fisico_cajas: number | null;
+  conteo_fisico_unidades_sueltas: number | null;
+  ubicacion_bodega: string | null;
 }
 
 export interface ReconciliacionRow {
@@ -144,8 +148,14 @@ export async function getIngresosPorProducto(
         ELSE SPLIT_PART(p.nroingreso, '-', 5)
       END                                 AS bodega_nombre,
       p.saldo                             AS saldo_zofri_unidades,
-      p.cantcaja                          AS packing
+      p.cantcaja                          AS packing,
+      ub.fisico                           AS conteo_fisico_unidades,
+      ub.fisico_cajas                     AS conteo_fisico_cajas,
+      ub.fisico_unidades                  AS conteo_fisico_unidades_sueltas,
+      ub.ubicacion                        AS ubicacion_bodega
     FROM public.productos p
+    LEFT JOIN public.ubicaciones_bodega ub
+      ON ub.codigo = p.codigo AND ub.nroingreso = p.nroingreso
     WHERE p.codigo = ANY(${codigos}::text[])
       AND p.nroingreso IS NOT NULL
       AND p.nroingreso != ''
@@ -172,6 +182,19 @@ export async function getIngresosPorProducto(
       bodega_nombre: r.bodega_nombre as string,
       saldo_zofri_unidades: toNum(r.saldo_zofri_unidades),
       packing: toNum(r.packing),
+      conteo_fisico_unidades:
+        r.conteo_fisico_unidades != null
+          ? toNum(r.conteo_fisico_unidades)
+          : null,
+      conteo_fisico_cajas:
+        r.conteo_fisico_cajas != null
+          ? toNum(r.conteo_fisico_cajas)
+          : null,
+      conteo_fisico_unidades_sueltas:
+        r.conteo_fisico_unidades_sueltas != null
+          ? toNum(r.conteo_fisico_unidades_sueltas)
+          : null,
+      ubicacion_bodega: (r.ubicacion_bodega as string) ?? null,
     });
   }
   return result;

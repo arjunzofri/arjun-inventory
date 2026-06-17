@@ -1,19 +1,12 @@
 import { getComprasAnil } from "@/db/vidadigital/queries";
-import { getConteosFisicos, getConteosFisicosIngreso } from "@/db/arjun/queries";
 import { ReconciliacionTable } from "@/components/reconciliacion/ReconciliacionTable";
 
 export default async function ReconciliacionPage() {
   let data;
-  let conteos: Record<string, number> = {};
-  let conteosIngreso: Record<string, { unidades: number; piso: string | null }> = {};
   let error: string | null = null;
 
   try {
-    [data, conteos, conteosIngreso] = await Promise.all([
-      getComprasAnil(),
-      getConteosFisicos(),
-      getConteosFisicosIngreso(),
-    ]);
+    data = await getComprasAnil();
   } catch (e) {
     console.error("ReconciliacionPage error:", e);
     error = "No se pudieron cargar los datos de compras. Verificá la conexión a Vida Digital.";
@@ -39,11 +32,7 @@ export default async function ReconciliacionPage() {
           No se encontraron compras para los clientes de Anil.
         </div>
       ) : (
-        <ReconciliacionTable
-          data={data}
-          initialConteos={conteos}
-          initialConteosIngreso={conteosIngreso}
-        />
+        <ReconciliacionTable data={data} />
       )}
     </div>
   );
